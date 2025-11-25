@@ -11,18 +11,18 @@ const syncUserCreation = inngest.createFunction(
     { event: "clerk/user.created" },
 
     async ({ event }) => {
-        const { id, firt_name, last_name, email_addresses, image_url } = event.data;
-        username = email_addresses[0].email_address.split("@")[0];
+        const { id, first_name, last_name, email_addresses, image_url } = event.data;
+        let username = email_addresses[0].email_address.split("@")[0];
 
         //   check availability of username
         const user = await User.findOne({ username });
         if (user) {
-            username = username + Math.floor(Math.random() * 10000);
+            let username = username + Math.floor(Math.random() * 10000);
         }
 
         const userData = {
-            id: id,
-            full_name: firt_name + " " + last_name,
+            _id: id,
+            full_name: first_name + " " + last_name,
             username: username,
             email: email_addresses[0].email_address,
             profile_picture: image_url,
@@ -42,16 +42,16 @@ const syncUserUpdation = inngest.createFunction(
     { event: "clerk/user.updated" },
 
     async ({ event }) => {
-        const { id, firt_name, last_name, email_addresses, image_url } = event.data;
-        username = email_addresses[0].email_address.split("@")[0];
+        const { id, first_name, last_name, email_addresses, image_url } = event.data;
+        let username = email_addresses[0].email_address.split("@")[0];
 
         const updateUserData = {
             email: email_addresses[0].email_address,
             profile_picture: image_url,
-            full_name: firt_name + " " + last_name,
+            full_name: first_name + " " + last_name,
         }
 
-        await User.findByIdAndUpdate({ id }, updateUserData);
+        await User.findByIdAndUpdate(id, updateUserData);
 
     }
 
@@ -71,7 +71,7 @@ const syncUserDeletion = inngest.createFunction(
             isActive: false,
         }
 
-        await User.findByIdAndUpdate({ id }, updateUserData);
+        await User.findByIdAndUpdate(id, updateUserData);
 
     }
 
