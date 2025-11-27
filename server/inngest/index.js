@@ -1,7 +1,6 @@
 import { Inngest } from "inngest";
 import User from "../models/user.js";
 import sendMail from "../config/nodeMailler.js";
-import { connection } from "mongoose";
 import Connection from "../models/connection.js";
 
 // Create a client to send and receive events
