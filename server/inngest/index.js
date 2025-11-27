@@ -1,5 +1,8 @@
 import { Inngest } from "inngest";
 import User from "../models/user.js";
+import sendMail from "../config/nodeMailler.js";
+import { connection } from "mongoose";
+import Connection from "../models/connection.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "pingup-app" });
@@ -77,9 +80,65 @@ const syncUserDeletion = inngest.createFunction(
 
 )
 
+// Inngest function to send email when new user requests added 
+const sendEmailWhenNewUserRequestsAdded = inngest.createFunction(
+
+    { id: "send-new-connection-request-reminder" },
+    { event: "app/connection-request" },
+
+    async ({ event, step }) => {
+        const { connctionID } = event.data
+        await step.run('send-connection-request-mail', async () => {
+            const connection = await Connection.findById(connctionID).populate('from_user_id to_user_id')
+            const subject = `New Connection Request from ${connection.from_user_id.full_name}`
+            const body = `<div style="font-family: Arial, sans-serif;padding: 20px">
+            <h2>Hi ${connection.to_user_id.full_name},</h2>
+            <P>You have new connection request from ${connection.from_user_id.full_name}- @${connection.from_user_id.username}</P>
+            <p>Click <a href="${process.env.FRONTEND_URL}/connection" style="color: #10b981;">here</a> to accept or reject the request</p>
+            <br/>
+            <p>Thanks <br/> PingUp- Stay Connected</p>
+            </div>`
+
+            await sendMail({
+                to: connection.to_user_id.email,
+                subject,
+                body
+            })
+        })
+
+        const in24HourInterval = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
+        await step.sleepUntil('wait-for-24-hours', in24HourInterval)
+        await step.run('send-connection-request-reminder', async () => {
+            const connection = await Connection.findById(connctionID).populate('from_user_id to_user_id')
+
+            if (connection.status = 'accepted') {
+                return { message: 'Connection request already accepted' }
+            }
+            const subject = `New Connection Request from ${connection.from_user_id.full_name}`
+            const body = `<div style="font-family: Arial, sans-serif;padding: 20px">
+            <h2>Hi ${connection.to_user_id.full_name},</h2>
+            <P>You have new connection request from ${connection.from_user_id.full_name}- @${connection.from_user_id.username}</P>
+            <p>Click <a href="${process.env.FRONTEND_URL}/connection" style="color: #10b981;">here</a> to accept or reject the request</p>
+            <br/>
+            <p>Thanks <br/> PingUp- Stay Connected</p>
+            </div>`
+
+            await sendMail({
+                to: connection.to_user_id.email,
+                subject,
+                body
+            })
+        })
+
+        return { message: 'Connection request reminder sent successfully' }
+    }
+)
+
 // Create an empty array where we'll export future Inngest functions
 export const functions = [
     syncUserCreation,
     syncUserUpdation,
-    syncUserDeletion
+    syncUserDeletion,
+    sendEmailWhenNewUserRequestsAdded
 ];

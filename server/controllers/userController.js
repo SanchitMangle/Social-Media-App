@@ -1,5 +1,6 @@
 import imagekit from "../config/imagekit.js";
-import { User } from "../models/user.js";
+import Connection from "../models/connection.js";
+import User from "../models/user.js";
 import fs from "fs";
 
 // Get usrdata using userId
@@ -15,11 +16,12 @@ export const getUserData = async (req, res) => {
         res.json({ success: false, message: error.message });
     }
 }
+
 // update userdata using userId
 export const updateUserData = async (req, res) => {
     try {
         const { userId } = req.auth();
-        const { username, full_name, bio, location } = req.body;
+        let { username, full_name, bio, location } = req.body;
         const tempUser = await User.findById(userId);
 
         !username && (username = tempUser.username);
@@ -37,7 +39,7 @@ export const updateUserData = async (req, res) => {
         }
 
         const profile = req.files.profile && req.files.profile[0]
-        const cover = req.files.cover_photo && req.files.cover[0]
+        const cover = req.files.cover_photo && req.files.cover_photo[0]
 
         if (profile) {
             const buffer = fs.readFileSync(profile.path);
@@ -59,7 +61,7 @@ export const updateUserData = async (req, res) => {
                 ]
 
             })
-            updateUserData.profile_picture = url;
+            updatedData.profile_picture = url;
         }
 
         if (cover) {
@@ -82,10 +84,10 @@ export const updateUserData = async (req, res) => {
                 ]
 
             })
-            updateUserData.cover_photo = url;
+            updatedData.cover_photo = url;
         }
 
-        const user = await User.findByIdAndUpdate(userId, updateUserData, { new: true });
+        const user = await User.findByIdAndUpdate(userId, updatedData, { new: true });
         res.json({ success: true, user, message: "User updated successfully" });
 
     } catch (error) {
@@ -94,3 +96,165 @@ export const updateUserData = async (req, res) => {
 }
 
 // Find user using username,location,email,name 
+// Get usrdata using userId
+export const discoverUser = async (req, res) => {
+    try {
+        const { userId } = req.auth();
+        const { input } = req.body;
+        const allusers = await User.find({
+            $or: [
+                { username: new RegExp(input, 'i') },
+                { email: new RegExp(input, 'i') },
+                { full_name: new RegExp(input, 'i') },
+                { location: new RegExp(input, 'i') }
+            ]
+        })
+
+        const filteredUsers = allusers.filter(user => user._id.toString() !== userId);
+        res.json({ success: true, users: filteredUsers });
+    } catch (error) {
+        res.json({ success: false, message: error.message });
+    }
+}
+
+
+// Follow users
+export const followUser = async (req, res) => {
+    try {
+        const { userId } = req.auth();
+        const { id } = req.body;
+
+        const user = await User.findById(userId);
+        if (user.following.includes(id)) {
+            return res.json({ success: false, message: "You are already following this user" });
+        }
+        user.following.push(id);
+        await user.save();
+
+        const toUser = await User.findById(id);
+        toUser.followers.push(userId);
+        await toUser.save();
+        res.json({ success: true, message: "User followed successfully" });
+    } catch (error) {
+        res.json({ success: false, message: error.message });
+    }
+}
+
+// Unfollow users
+export const unfollowUser = async (req, res) => {
+    try {
+        const { userId } = req.auth();
+        const { id } = req.body;
+
+        const user = await User.findById(userId);
+        user.following = user.following.filter(user => user.toString() !== id);
+        await user.save();
+
+        const toUser = await User.findById(id);
+        toUser.followers = toUser.followers.filter(user => user.toString() !== id);
+        await toUser.save();
+        res.json({ success: true, message: "User unfollowed successfully" });
+    } catch (error) {
+        res.json({ success: false, message: error.message });
+    }
+}
+
+// send connection request
+export const sendConnectionRequest = async (req, res) => {
+    try {
+        const { userId } = req.auth();
+        const { id } = req.body;
+        // check user has send more than 20 connection request in last 24 hours
+        const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        const connectionRequestCount = await Connection.countDocuments({
+            from_user_id: userId,
+            to_user_id: id,
+            createdAt: { $gte: last24Hours }
+        });
+
+        if (connectionRequestCount >= 20) {
+            return res.json({ success: false, message: "You have sent more than 20 connection requests in last 24 hours" });
+        }
+
+        // check if user is already connected
+        const connection = await Connection.findOne({
+            $or: [
+                { from_user_id: userId, to_user_id: id },
+                { from_user_id: id, to_user_id: userId }
+            ]
+        });
+
+        if (!connection) {
+            await Connection.create({
+                from_user_id: userId,
+                to_user_id: id,
+            })
+            res.json({ success: true, message: "Connection request sent successfully" });
+        }
+        else if (connection && connection.status === "accepted") {
+            return res.json({ success: false, message: "You are already connected" });
+        }
+        res.json({ success: false, message: "connection request pending" });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+}
+
+
+// Get user connections 
+export const getUserConnections = async (req, res) => {
+    try {
+        const { userId } = req.auth();
+        const user = await User.findById(userId).populate("connections followers following");
+
+        const connections = user.connections;
+        const followers = user.followers;
+        const following = user.following;
+
+        const pendingConnections = (await Connection.find({
+            to_user_id: userId,
+            status: "pending"
+        }).populate("from_user_id")).map((connection) => connection.from_user_id);
+
+        res.json({ success: true, connections, followers, following, pendingConnections });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+}
+
+
+// Accept connection request
+export const acceptConnectionRequest = async (req, res) => {
+    try {
+        const { userId } = req.auth();
+        const { id } = req.body;
+
+        const connection = await Connection.findOne({
+            from_user_id: id,
+            to_user_id: userId,
+        });
+
+        if (!connection) {
+            return res.json({ success: false, message: "Connection request not found" });
+        }
+
+        const user = await User.findById(userId);
+        user.connections.push(id);
+        await user.save();
+
+        const toUser = await User.findById(id);
+        toUser.connections.push(userId);
+        await toUser.save();
+
+        connection.status = "accepted";
+        await connection.save();
+
+        res.json({ success: true, message: "Connection request accepted successfully" });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+}

@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema({
     location: { type: String, default: "" },
     followers: [{ type: String, ref: 'User' }],
     following: [{ type: String, ref: 'User' }],
-    connctions: [{ type: String, ref: 'User' }],
+    connections: [{ type: String, ref: 'User' }],
     isActive: { type: Boolean, default: true },
 }, { timestamps: true, minimize: false })
 

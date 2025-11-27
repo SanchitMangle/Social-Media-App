@@ -9,19 +9,27 @@ import Conections from './pages/Conections'
 import Discover from './pages/Discover'
 import Profile from './pages/Profile'
 import CreatePost from './pages/CreatePost'
-import { useUser } from '@clerk/clerk-react'
-import {Toaster} from 'react-hot-toast'
+import { useUser, useAuth } from '@clerk/clerk-react'
+import { Toaster } from 'react-hot-toast'
+import { useEffect } from 'react'
 
 const App = () => {
 
-  const {user} = useUser()
-
+  const { user } = useUser()
+  const { getToken } = useAuth()
+  useEffect(() => {
+    if (user) {
+      getToken().then((token) => {
+        console.log(token)
+      })
+    }
+  }, [user])
   return (
     <>
-    <Toaster/>
+      <Toaster />
       <Routes>
-        <Route path='/' element={ user ? <Layout/> : <Login />}>
-          <Route index  element={<Feed />} />
+        <Route path='/' element={user ? <Layout /> : <Login />}>
+          <Route index element={<Feed />} />
           <Route path='messages' element={<Messages />} />
           <Route path='messages/:userId' element={<ChatBox />} />
           <Route path='connections' element={<Conections />} />
